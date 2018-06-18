@@ -1,70 +1,24 @@
 package org.litespring.beans.factory.support;
 
-import java.io.InputStream;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.dom4j.Document;
-import org.dom4j.Element;
-import org.dom4j.io.SAXReader;
 import org.litespring.beans.BeanDefinition;
 import org.litespring.beans.factory.BeanCreationException;
-import org.litespring.beans.factory.BeanFactory;
-import org.litespring.beans.factory.BeansDefinitionStoreException;
+import org.litespring.beans.factory.config.ConfigurableBeanFactory;
 import org.litespring.util.ClassUtils;
 
-public class DefaultBeanFactory implements BeanFactory {
-	
+public class DefaultBeanFactory extends DefaultSingletonBeanRegistry implements ConfigurableBeanFactory, BeanDefinitionRegistry {
+
 	public static final String ID_ATTRIBUTE = "id";
 	public static final String CLASS_ATTRIBUTE = "class";
 
 	private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>();
-	
-	public DefaultBeanFactory(String configFile) {
-		// TODO Auto-generated constructor stub
-		loadBeanDefinition(configFile);
-	}
-	
-	
 
-	private void loadBeanDefinition(String configFile) {
-		// TODO Auto-generated method stub
-		InputStream is = null;
-		try {
-			ClassLoader cl = ClassUtils.getDefaultClassLoader();
-			is = cl.getResourceAsStream(configFile);
-			SAXReader reader = new SAXReader();
-			Document doc = reader.read(is);
-			
-			Element root = doc.getRootElement();
-			Iterator<Element> iter = root.elementIterator();
-			while (iter.hasNext()) {
-				Element ele = iter.next();
-				String id = ele.attributeValue(ID_ATTRIBUTE);
-				String beanClassName = ele.attributeValue(CLASS_ATTRIBUTE);
-				BeanDefinition bd = new GenericBeanDefinition(id, beanClassName);
-				this.beanDefinitionMap.put(id, bd);
-			}
-		} catch (Exception e) {
-			// TODO: handle exception
-			throw new BeansDefinitionStoreException("", e);
-		} finally {
-			if (is != null) {
-				try {
-					is.close();
-				} catch (Exception e2) {
-					e2.printStackTrace();
-				}
-			}
-		}
-	}
-
-
+	private ClassLoader beanClassLoader;
 
 	@Override
 	public BeanDefinition getBeanDefinition(String string) {
-		// TODO Auto-generated method stub
 		return this.beanDefinitionMap.get(string);
 	}
 
@@ -75,7 +29,22 @@ public class DefaultBeanFactory implements BeanFactory {
 		if (bd == null) {
 			throw new BeanCreationException("");
 		}
-		ClassLoader cl = ClassUtils.getDefaultClassLoader();
+		
+		if (bd.isSingleton()) {
+			Object obj = this.getSingleton(beanID);
+			if (obj==null) {
+				obj = createBean(bd);
+				this.registerSingleton(beanID, obj);
+			}
+			return obj;
+		}
+		
+		return createBean(bd);
+		
+	}
+	
+	private Object createBean(BeanDefinition bd) {
+		ClassLoader cl = this.getBeanClassLoader();
 		String beanClassName = bd.getBeanClassName();
 		try {
 			Class<?> clz = cl.loadClass(beanClassName);
@@ -84,5 +53,20 @@ public class DefaultBeanFactory implements BeanFactory {
 			throw new BeanCreationException("");
 		}
 	}
-	
+
+	@Override
+	public void registerBeanDefinition(String beanID, BeanDefinition bd) {
+		this.beanDefinitionMap.put(beanID, bd);
+	}
+
+	@Override
+	public void setBeanClassLoader(ClassLoader classLoader) {
+		this.beanClassLoader = classLoader;
+	}
+
+	@Override
+	public ClassLoader getBeanClassLoader() {
+		return (this.beanClassLoader != null ? beanClassLoader : ClassUtils.getDefaultClassLoader());
+	}
+
 }
